@@ -2,7 +2,7 @@ use alacritty_terminal::{
     event::EventListener,
     grid::Dimensions,
     index::Point,
-    term::{Term, cell::Cell, cell::Flags, color::Colors, search::Match},
+    term::{Term, TermMode, cell::Cell, cell::Flags, color::Colors, search::Match},
     vte::ansi::CursorShape,
 };
 use gpui::Hsla;
@@ -11,6 +11,8 @@ use super::{
     boxes,
     ink::{DIM, Ink},
 };
+
+mod syntax;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Underline {
@@ -95,10 +97,12 @@ pub fn frame<T: EventListener>(
     let mut rows = vec![Row::default(); term.screen_lines()];
     let at = content.cursor.point;
     let mut cursor = None;
+    let mut syntax = syntax::Syntax::default();
     for indexed in content.display_iter {
         let (point, cell) = (indexed.point, indexed.cell);
         let row = (point.line.0 + offset) as usize;
         let mut look = style(cell, ink, content.colors);
+        let subcommand = !term.mode().contains(TermMode::ALT_SCREEN) && syntax.subcommand(cell);
         let covers = |contains: &dyn Fn(Point) -> bool| {
             let (line, column) = (point.line, point.column);
             contains(point)
@@ -106,11 +110,17 @@ pub fn frame<T: EventListener>(
                 || (cell.flags.contains(Flags::WIDE_CHAR_SPACER)
                     && contains(Point::new(line, column - 1)))
         };
-        if content
+        let selected = content
             .selection
             .as_ref()
-            .is_some_and(|range| covers(&|at| range.contains(at)))
-        {
+            .is_some_and(|range| covers(&|at| range.contains(at)));
+        if subcommand && !selected {
+            look.fg = ink.ansi[4];
+            if cell.underline_color().is_none() {
+                look.underline_color = look.fg;
+            }
+        }
+        if selected {
             look.bg = Some(ink.selection);
             look.fg = ink.selection_text.unwrap_or(look.fg);
         } else if let Some((_, wash)) = lit.iter().find(|(hit, _)| covers(&|at| hit.contains(&at)))
@@ -218,6 +228,9 @@ fn style(cell: &Cell, ink: &Ink, set: &Colors) -> Style {
 
 #[cfg(test)]
 mod hover_tests;
+
+#[cfg(test)]
+mod syntax_tests;
 
 #[cfg(test)]
 mod tests {
