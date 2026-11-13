@@ -303,6 +303,15 @@ pub const MESSAGES: &[(&str, &str)] = &[
     ("et.panel.git", "Git"),
     ("et.panel.files", "Files"),
     ("et.files.open", "Open"),
+    ("et.files.change_directory", "Change directory here"),
+    (
+        "et.files.change_directory_failed",
+        "Cannot change directory",
+    ),
+    (
+        "et.files.change_directory_wait",
+        "Use this action at an empty shell prompt with shell integration.",
+    ),
     ("et.files.new_session", "New session here"),
     ("et.files.choose_folder", "Choose folder for a new session…"),
     (

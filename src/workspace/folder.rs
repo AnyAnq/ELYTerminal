@@ -38,11 +38,11 @@ impl Workspace {
                 match result {
                     Ok(Some(folder)) => {
                         if let Err(error) = this.here(folder, window, cx) {
-                            failed(error, window, cx);
+                            failed(error, "et.files.folder_failed", window, cx);
                         }
                     }
                     Ok(None) => log::info!("app: folder choice cancelled"),
-                    Err(error) => failed(error, window, cx),
+                    Err(error) => failed(error, "et.files.folder_failed", window, cx),
                 }
             }) {
                 log::debug!("app: folder choice owner closed: {error:#}");
@@ -65,9 +65,9 @@ fn selected(paths: Option<Vec<PathBuf>>) -> anyhow::Result<Option<PathBuf>> {
     Ok(Some(path))
 }
 
-pub(super) fn failed(error: anyhow::Error, window: &mut Window, cx: &mut App) {
-    log::error!("app: cannot open a session in the chosen folder: {error:#}");
-    let title = text(cx, "et.files.folder_failed", &[]);
+pub(super) fn failed(error: anyhow::Error, title: &str, window: &mut Window, cx: &mut App) {
+    let title = text(cx, title, &[]);
+    log::error!("app: {title}: {error:#}");
     let close = text(cx, "et.files.dismiss", &[]);
     let answer = window.prompt(
         PromptLevel::Critical,

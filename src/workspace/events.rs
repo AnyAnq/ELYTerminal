@@ -1,9 +1,30 @@
+use std::path::Path;
+
+use anyhow::Context as _;
 use gpui::{Context, EntityId, Focusable, Window};
 
 use super::Workspace;
 use crate::term::{State, TerminalEvent};
 
 impl Workspace {
+    /// Changes the current session's directory and returns focus to it.
+    pub(super) fn change_directory(
+        &mut self,
+        folder: &Path,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> anyhow::Result<()> {
+        let session = self
+            .sessions
+            .get(self.active)
+            .context("app: no active session to change directory")?;
+        session
+            .terminal
+            .update(cx, |view, cx| view.change_directory(folder, cx))?;
+        window.focus(&session.terminal.focus_handle(cx), cx);
+        Ok(())
+    }
+
     /// What session `id`'s terminal reported.
     pub(super) fn session_event(
         &mut self,

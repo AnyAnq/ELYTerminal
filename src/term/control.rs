@@ -44,7 +44,7 @@ impl TerminalView {
     /// Types `text` and Enter, as the keyboard would.
     pub fn typed(&mut self, text: &str, cx: &mut Context<Self>) {
         log::info!(
-            "terminal {}: another program types {} bytes",
+            "terminal {}: submits {} bytes and Enter",
             self.pty.pid,
             text.len()
         );

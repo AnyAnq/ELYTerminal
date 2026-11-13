@@ -27,6 +27,7 @@ mod marks;
 mod menu;
 
 use marks::{Marked, mark_key, remark};
+pub use menu::Here;
 
 /// How often Files reads its open folders again.
 const POLL: Duration = Duration::from_secs(1);
@@ -97,7 +98,7 @@ fn key(path: &Path) -> SharedString {
     }
 }
 
-/// New session here's folder: itself, or a file's parent.
+/// A folder action's target: itself, or a file's parent.
 pub(super) fn here_folder(path: &Path, folder: bool) -> PathBuf {
     if folder {
         path.to_path_buf()
@@ -107,9 +108,6 @@ pub(super) fn here_folder(path: &Path, folder: bool) -> PathBuf {
             .to_path_buf()
     }
 }
-
-/// New session here: the folder it starts in.
-pub struct Here(pub PathBuf);
 
 /// A right press waiting to open Files' menu.
 struct MenuAsk {

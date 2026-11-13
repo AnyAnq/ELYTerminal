@@ -105,9 +105,19 @@ impl Workspace {
             files.poll(cx);
             files
         });
-        let here = cx.subscribe_in(&files, window, |this, _, Here(folder), window, cx| {
-            if let Err(error) = this.here(folder.clone(), window, cx) {
-                folder::failed(error, window, cx);
+        let here = cx.subscribe_in(&files, window, |this, _, action: &Here, window, cx| {
+            let (result, title) = match action {
+                Here::NewSession(folder) => (
+                    this.here(folder.clone(), window, cx),
+                    "et.files.folder_failed",
+                ),
+                Here::ChangeDirectory(folder) => (
+                    this.change_directory(folder, window, cx),
+                    "et.files.change_directory_failed",
+                ),
+            };
+            if let Err(error) = result {
+                folder::failed(error, title, window, cx);
             }
         });
         let mut workspace = Self {

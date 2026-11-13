@@ -7,11 +7,18 @@ use ely_gpui_component::{
 };
 use gpui::{App, ClipboardItem, Entity};
 
-use super::{Files, Here};
+use super::Files;
 
-/// A right press's menu; `here` starts a session.
+/// A Files menu action at its node's folder.
+pub enum Here {
+    NewSession(PathBuf),
+    ChangeDirectory(PathBuf),
+}
+
+/// A right press's menu at `path` and its folder.
 pub fn row(files: &Entity<Files>, path: PathBuf, here: PathBuf, cx: &App) -> Menu {
     let (open, host, copy) = (path.clone(), files.clone(), path);
+    let (navigate, folder) = (files.clone(), here.clone());
     Menu::new()
         .item(
             MenuItem::new(text(cx, "et.files.open", &[]))
@@ -22,9 +29,18 @@ pub fn row(files: &Entity<Files>, path: PathBuf, here: PathBuf, cx: &App) -> Men
                 }),
         )
         .item(
+            MenuItem::new(text(cx, "et.files.change_directory", &[]))
+                .icon(IconName::Folder)
+                .on_click(move |_, cx| {
+                    navigate.update(cx, |_, cx| cx.emit(Here::ChangeDirectory(folder.clone())))
+                }),
+        )
+        .item(
             MenuItem::new(text(cx, "et.files.new_session", &[]))
                 .icon(IconName::Terminal)
-                .on_click(move |_, cx| host.update(cx, |_, cx| cx.emit(Here(here.clone())))),
+                .on_click(move |_, cx| {
+                    host.update(cx, |_, cx| cx.emit(Here::NewSession(here.clone())))
+                }),
         )
         .separator()
         .item(

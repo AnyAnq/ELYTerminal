@@ -285,6 +285,12 @@ pub const MESSAGES: &[(&str, &str)] = &[
     ("et.panel.git", "Git"),
     ("et.panel.files", "文件"),
     ("et.files.open", "打开"),
+    ("et.files.change_directory", "定位到此处"),
+    ("et.files.change_directory_failed", "无法切换目录"),
+    (
+        "et.files.change_directory_wait",
+        "请在已启用 shell 集成的空命令行提示符下使用此操作。",
+    ),
     ("et.files.new_session", "在此新建会话"),
     ("et.files.choose_folder", "选择文件夹新建会话…"),
     ("et.files.folder_failed", "无法在所选文件夹新建会话"),
