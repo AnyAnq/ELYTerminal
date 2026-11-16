@@ -20,7 +20,7 @@ use ely_gpui_component::{
 use futures::StreamExt;
 use gpui::{
     Bounds, Context, EventEmitter, ExternalPaths, FocusHandle, Focusable, IntoElement, MouseButton,
-    ParentElement, Pixels, Render, SharedString, Styled, Subscription, Task, Window, div,
+    ParentElement, Pixels, Render, SharedString, Styled, Subscription, Task, Window, canvas, div,
     prelude::*, px,
 };
 
@@ -64,6 +64,7 @@ pub enum TerminalEvent {
     Exited(ExitStatus),
     /// A Files node's drag landed on it: the node's tree key.
     Dragged(SharedString),
+    Focused,
 }
 
 /// A program on a pseudo-terminal, drawn cell by cell in the theme and font the settings choose.
@@ -106,6 +107,8 @@ pub struct TerminalView {
     pub(super) notices: Notices,
     /// kitty's clipboard protocol: its write, grants and read asking.
     pub(super) clips: clipboard::Session,
+    /// A paste that waits for the user's word.
+    pub(super) pasting: Option<String>,
     /// The program's title; empty while it names none.
     pub(super) title: String,
     /// It is the session shown.
@@ -181,6 +184,7 @@ impl TerminalView {
             shell: Shell::Busy,
             notices: Notices::default(),
             clips: clipboard::Session::default(),
+            pasting: None,
             title: String::new(),
             front: true,
             active: false,
@@ -312,6 +316,10 @@ impl TerminalView {
     /// Tells a program that asked, by mode 1004, when the terminal gains or loses focus.
     fn refocus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.active = window.is_window_active();
+        // Its release may land in another app.
+        if !self.active {
+            self.end_selection(cx);
+        }
         let focused = self.focus.is_focused(window) && window.is_window_active();
         if focused != self.focused {
             self.focused = focused;
@@ -470,16 +478,22 @@ impl Render for TerminalView {
                 root.text_color(ink.fg).child(format!("{error:#}"))
             }
         };
+        let this = cx.entity();
         div()
             .relative()
             .size_full()
             .child(root)
             .children(scrollbar::bar(span, window, cx))
+            .child(canvas(
+                |_, _, _| {},
+                move |_, _, window, cx| super::pointer::follow_drag(&this, window, cx),
+            ))
             .children(
                 self.find_box(cx)
                     .map(|found| div().absolute().top_2().right_4().child(found)),
             )
             .children(self.clipboard_prompt(cx))
+            .children(self.paste_prompt(cx))
     }
 }
 

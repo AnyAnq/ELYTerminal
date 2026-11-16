@@ -69,7 +69,10 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) -> anyhow::Result<()> {
         anyhow::ensure!(
-            !self.herdr && self.marked.is_none() && ready(&self.pty.term.lock(), self.shell),
+            !self.herdr
+                && self.marked.is_none()
+                && self.pasting.is_none()
+                && ready(&self.pty.term.lock(), self.shell),
             "terminal {}: {}",
             self.pty.pid,
             text(cx, "et.files.change_directory_wait", &[])
