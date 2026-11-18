@@ -11,7 +11,7 @@ use crate::settings::SettingsStore;
 
 impl TerminalView {
     /// The selected text without alacritty's final newline, as Ghostty copies it.
-    pub(super) fn selected(&self) -> Option<String> {
+    pub(in crate::term) fn selected(&self) -> Option<String> {
         let mut text = self.pty.term.lock().selection_to_string()?;
         if text.ends_with('\n') {
             text.pop();
@@ -80,6 +80,7 @@ impl TerminalView {
 
     /// The clipboard's text, bracketed if asked; under 5522, its types.
     pub(in crate::term) fn paste(&mut self, cx: &mut Context<Self>) {
+        self.ai_human(cx);
         if self.pty.term.lock().mode().contains(TermMode::PASTE_EVENTS) {
             return self.paste_event(cx);
         }

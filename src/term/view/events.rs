@@ -48,7 +48,10 @@ impl TerminalView {
                 #[cfg(windows)]
                 PtyEvent::Win32(on) => self.win32 = on,
                 PtyEvent::Mark(Mark::Done(status), _) => self.finished(status, cx),
-                PtyEvent::Mark(Mark::Prompt(click), _) => {
+                PtyEvent::Mark(Mark::Command(id, status), _) => self.agent.mark(id, status),
+                PtyEvent::Mark(Mark::Prompt(click), holder) => {
+                    self.agent.own_prompt = holder == super::super::status::Holder::Shell;
+                    self.agent.prompt = self.agent.prompt.wrapping_add(1);
                     self.shell = Shell::Prompting(click);
                     self.restate(cx);
                 }
@@ -64,7 +67,10 @@ impl TerminalView {
                         cx.emit(TerminalEvent::Ended(None));
                     }
                 }
-                PtyEvent::Mark(Mark::Input, _) => self.shell = self.shell.reads(),
+                PtyEvent::Mark(Mark::Input, _) => {
+                    self.shell = self.shell.reads();
+                    self.ai_resume_input(cx);
+                }
                 PtyEvent::Status(status, owner) => {
                     self.status(status, owner);
                     self.restate(cx);

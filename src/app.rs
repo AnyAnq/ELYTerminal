@@ -50,6 +50,7 @@ pub fn start(cx: &mut App) -> anyhow::Result<()> {
     }
     SettingsStore::init(cx)?;
     i18n::init(cx);
+    crate::ai::init(cx);
     crate::interface::init(cx);
     updates::start(cx);
     ShellIntegration::init(cx)?;

@@ -24,6 +24,7 @@ use crate::{
     term::{Events, Launch, Pty},
 };
 
+mod assistant;
 mod control;
 mod events;
 mod folder;
@@ -77,6 +78,8 @@ pub struct Workspace {
     active: usize,
     files: Entity<Files>,
     git: Entity<GitPanel>,
+    assistant: Entity<crate::ai::Assistant>,
+    _assistant: Subscription,
     /// What the window shows of the desktop, and the blur behind it.
     background: Blur,
     /// Column widths a drag shows before the settings hold them.
@@ -103,6 +106,19 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> Self {
         let git = cx.new(|cx| GitPanel::new(launch.cwd.clone(), window, cx));
+        let assistant = cx.new(|cx| crate::ai::Assistant::new(window, cx));
+        let assistant_watch = cx.subscribe_in(
+            &assistant,
+            window,
+            |this, _, notice: &crate::ai::Notice, window, cx| {
+                if matches!(notice, crate::ai::Notice::Closed)
+                    && let Some(session) = this.sessions.get(this.active)
+                {
+                    window.focus(&session.terminal().focus_handle(cx), cx);
+                }
+                cx.notify();
+            },
+        );
         // A change the Git panel made shows in Files' marks too.
         let acted = cx.subscribe(&git, |this, _, _: &Acted, cx| {
             let folder = this.sessions[this.active].pane().folder.clone();
@@ -134,6 +150,8 @@ impl Workspace {
             active: 0,
             files,
             git,
+            assistant,
+            _assistant: assistant_watch,
             background: Blur::new(window, SettingsStore::get(cx)),
             dragged: Dragged::default(),
             ticking: None,
@@ -245,6 +263,8 @@ impl Workspace {
         log::info!("app: session {} closes", index + 1);
         // Its textures leave the window's atlas with it.
         for pane in &session.panes {
+            self.assistant
+                .update(cx, |assistant, cx| assistant.pane_closed(pane.id(), cx));
             pane.terminal
                 .update(cx, |view, _| view.set_front(false, window));
         }
@@ -469,6 +489,7 @@ impl Render for Workspace {
                                 .size_full()
                                 .children(wallpaper::paint(&settings, base, window, cx))
                                 .child(shell)
+                                .children(self.ai_overlay(window, cx))
                                 .children(self.leave_prompt(cx)),
                         ),
                     ),

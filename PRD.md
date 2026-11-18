@@ -8,7 +8,7 @@ Chapters run in build order. `TASKS.md` follows them line by line.
 
 - One window. Sessions on the left, the terminal in the middle, Git or Files on the right.
 - Every setting has a control in the settings window. No setting lives only in a file.
-- Silent: no sound, no bell, no notifications but a session's and a newer release's, below, no telemetry, no tips, no onboarding. The one call out is the update check the owner asked for, a switch in Settings › Terminal.
+- Silent: no sound, no bell, no notifications but a session's and a newer release's, below, no telemetry, no tips, no onboarding. Update checks follow Settings › Terminal; AI requests go to the service the user selects, on request alone.
 - Clean: no subtitle, no tagline, no logging options, no status bar, no badges that do not carry state.
 - Built-in themes, each shown as a small preview, Catppuccin among them, and themes of the user's own, each made from Ely Dark and never over a built-in one. A theme colors the terminal and the chrome.
 - The window background blurs on macOS, Windows, Wayland and X11.
@@ -201,6 +201,18 @@ Cmd-, opens it; on Windows and Linux, which have no menu bar, so does a gear in 
 - Homebrew installs the disk image from the org's tap, `ely-open-source/tap/elyterminal`, and winget the zip as `ELYOpenSource.ELYTerminal` once Microsoft's catalog takes the manifest, both filled from each release's digests by `scripts/package-managers.sh`. The install guide tells SmartScreen's warning from a Defender detection and says how to report a false positive.
 - Windows also gets an NSIS installer, `ELYTerminal-VERSION-windows-ARCH-setup.exe`, from `scripts/windows-installer.ps1`: for one user, with a Start menu entry and an uninstaller that leaves the settings.
 
+
+## 16. AI assistant
+
+- A click on Ely toggles a nonmodal panel inside the main window; petting and dragging remain distinct. The panel follows the interface language and theme.
+- Settings › AI models stores multiple streamed Chat Completions-compatible model configurations. API keys use the system credential store, never a file. Keyless local services work. A connection test verifies chat and a complete function-call cycle; unsupported models remain chat only.
+- Each task binds to its launch pane, its project directory and its selected model. Continue task keeps that directory for file tools. A new request uses the pane's current directory. One task runs app-wide. New messages attach the visible terminal, recent 200 lines and selection, with a context preview and a notice naming that the text goes to the selected service.
+- An integrated Windows PowerShell, pwsh or cmd pane supports autonomous diagnosis, exact project file edits, terminal commands and verification. Other shells and platforms initially support chat and attached context alone. Explicitly launched programs, handed sessions and shells with custom arguments are not execution targets.
+- Wait for existing programs. Interactive or password cases require manual takeover. At a ready prompt, cancel unfinished input, including nonempty input, before AI command submission; do not promise draft restoration. Command receipts include a unique identity and exit code.
+- Git commands, destructive, unknown or compound commands, elevation, global installations, pushes and deployment require approval by default. Auto allow sits beside the assistant's model selector, off by default and saved. Enabling it resumes pending approval and skips later prompts. Stop, manual takeover, pane binding and the call limit still apply. Declined actions do not execute. Project file tools enforce canonical boundaries, protected configuration files, unique replacements and size limits.
+- Stop, manual typing, paste or Ctrl+C cancels the task and attempts to interrupt its command. Buffer takeover input until the shell returns a prompt. Closing the target pane or app cancels; hiding the panel continues. Completed edits remain.
+- Conversations stay in memory per pane and are cleared when the pane closes. Pause after 30 model calls and allow another 30 through Continue task. Do not persist conversation history.
+- Messages, notes, tools and terminal context can be copied in full. Recall submitted prompts with previous/next buttons or Alt+Up/Down while the AI input is focused, edit before sending, and restore the unsent draft when returning past the latest prompt. Recall does not submit; history follows the current conversation in memory.
 
 ## Deferred
 

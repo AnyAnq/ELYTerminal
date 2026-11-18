@@ -198,6 +198,7 @@ pub struct Settings {
     pub ely: bool,
     /// How far in from the pane's left edge she stands, in points, as a drag left her.
     pub ely_left: f32,
+    pub ai: crate::ai::config::Settings,
     /// A check for a newer release at start and once a day.
     pub check_updates: bool,
     /// Whether `elyterminal ctl` may read and type into sessions.
@@ -284,6 +285,7 @@ impl Default for Settings {
             confirm_quit: true,
             ely: true,
             ely_left: 140.0,
+            ai: crate::ai::config::Settings::default(),
             check_updates: true,
             control: false,
             show_sessions: true,
@@ -345,6 +347,7 @@ impl Settings {
         within("window_width", self.window_width, &WINDOW)?;
         within("window_height", self.window_height, &WINDOW)?;
         within("ely_left", self.ely_left, &ELY_LEFT)?;
+        self.ai.validate()?;
         if let Some(place) = &self.window_place {
             anyhow::ensure!(!place.display.is_empty(), "window_place names no display");
             within("window_place", place.x, &PLACE)?;

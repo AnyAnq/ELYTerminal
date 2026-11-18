@@ -64,6 +64,25 @@ function global:ElyCmdBack {
         $global:ElyCmdBack = $null
     }
 }
+function global:ElyCommandIsPowerShell([string]$line) {
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput($line, [ref]$null, [ref]$null)
+    # Strict mode refuses .Count on one statement alone, so the statements stay a list.
+    $statements = @(if ($ast.EndBlock) { $ast.EndBlock.Statements })
+    $last = if ($statements.Count) { $statements[$statements.Count - 1] }
+    if ($last -is [System.Management.Automation.Language.PipelineAst]) {
+        $elements = $last.PipelineElements
+        $last = $elements[$elements.Count - 1]
+    }
+    $name = if ($last -is [System.Management.Automation.Language.CommandAst]) { $last.GetCommandName() }
+    if ($name) {
+        $pattern = [System.Management.Automation.WildcardPattern]::Escape($name)
+        $info = Get-Command -Name $pattern -ErrorAction Ignore | Select-Object -First 1
+        while ($info -and $info.CommandType -eq 'Alias') { $info = $info.ResolvedCommand }
+        $null -eq $info -or $info.CommandType -eq 'Cmdlet'
+    } else {
+        $null -eq $last -or -not $last.Find({ $args[0] -is [System.Management.Automation.Language.CommandAst] }, $true)
+    }
+}
 # A command starts once PSReadLine hands over a line that is not blank.
 if (Test-Path Function:\PSConsoleHostReadLine) {
     $global:ElyReadLine = $function:PSConsoleHostReadLine
@@ -72,25 +91,9 @@ if (Test-Path Function:\PSConsoleHostReadLine) {
         if (-not [string]::IsNullOrWhiteSpace($line)) {
             $global:ElyRan = $true
             $global:ElyExit = Get-Variable LASTEXITCODE -Scope Global -ValueOnly -ErrorAction Ignore
-            # A program's code is the line's, unless the line surely ends in PowerShell: a cmdlet, a name not found, or no command.
-            $ast = [System.Management.Automation.Language.Parser]::ParseInput($line, [ref]$null, [ref]$null)
-            # Strict mode refuses .Count on one statement alone, so the statements stay a list.
-            $statements = @(if ($ast.EndBlock) { $ast.EndBlock.Statements })
-            $last = if ($statements.Count) { $statements[$statements.Count - 1] }
-            if ($last -is [System.Management.Automation.Language.PipelineAst]) {
-                $elements = $last.PipelineElements
-                $last = $elements[$elements.Count - 1]
-            }
-            $name = if ($last -is [System.Management.Automation.Language.CommandAst]) { $last.GetCommandName() }
-            $global:ElyShell = if ($name) {
-                $pattern = [System.Management.Automation.WildcardPattern]::Escape($name)
-                $info = Get-Command -Name $pattern -ErrorAction Ignore | Select-Object -First 1
-                while ($info -and $info.CommandType -eq 'Alias') { $info = $info.ResolvedCommand }
-                $null -eq $info -or $info.CommandType -eq 'Cmdlet'
-            } else {
-                $null -eq $last -or -not $last.Find({ $args[0] -is [System.Management.Automation.Language.CommandAst] }, $true)
-            }
             [Console]::Write("$([char]27)]133;C$([char]7)")
+            # A program's code is the line's, unless the line surely ends in PowerShell: a cmdlet, a name not found, or no command.
+            $global:ElyShell = ElyCommandIsPowerShell $line
         }
         $line
     }

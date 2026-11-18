@@ -145,6 +145,7 @@ impl TerminalView {
         cell: (usize, usize),
         modifiers: &Modifiers,
         tracking: Tracking,
+        cx: &mut Context<Self>,
     ) -> bool {
         let wheel = matches!(button, Some(Button::WheelUp | Button::WheelDown));
         // herdr's link key is Ctrl; on macOS Cmd stands for it, the wheel aside.
@@ -162,6 +163,9 @@ impl TerminalView {
             return false;
         };
         log::trace!("terminal {}: {report:?} sends {bytes:?}", self.pty.pid);
+        if !matches!(gesture, Gesture::Release) {
+            self.ai_human(cx);
+        }
         self.pty.write(bytes);
         self.pointer.last = Some(cell);
         true
@@ -206,6 +210,7 @@ impl TerminalView {
                 cell,
                 &event.modifiers,
                 tracking,
+                cx,
             ) && !self.pointer.pressed.contains(&pressed)
             {
                 self.pointer.pressed.push(pressed);
@@ -271,7 +276,7 @@ impl TerminalView {
             let held = [Button::Left, Button::Right, Button::Middle]
                 .into_iter()
                 .find(|button| self.pointer.pressed.contains(button));
-            self.report(held, Gesture::Motion, cell, &event.modifiers, tracking);
+            self.report(held, Gesture::Motion, cell, &event.modifiers, tracking, cx);
         }
     }
 
@@ -346,7 +351,7 @@ impl TerminalView {
         }
         if let Some(released) = button(event.button) {
             let (cell, ..) = self.cell_at(event.position);
-            self.release(released, cell, &event.modifiers);
+            self.release(released, cell, &event.modifiers, cx);
         }
     }
 
@@ -361,7 +366,7 @@ impl TerminalView {
                 .pointer
                 .last
                 .expect("a press the program heard set a cell");
-            self.release(held, cell, &Modifiers::default());
+            self.release(held, cell, &Modifiers::default(), cx);
         }
     }
 
@@ -383,11 +388,24 @@ impl TerminalView {
     }
 
     /// Reports `released` coming up when its press went to the program.
-    fn release(&mut self, released: Button, cell: (usize, usize), modifiers: &Modifiers) {
+    fn release(
+        &mut self,
+        released: Button,
+        cell: (usize, usize),
+        modifiers: &Modifiers,
+        cx: &mut Context<Self>,
+    ) {
         if self.pointer.pressed.contains(&released) {
             self.pointer.pressed.retain(|held| *held != released);
             let tracking = self.mouse.tracking;
-            self.report(Some(released), Gesture::Release, cell, modifiers, tracking);
+            self.report(
+                Some(released),
+                Gesture::Release,
+                cell,
+                modifiers,
+                tracking,
+                cx,
+            );
         }
     }
 
@@ -439,7 +457,14 @@ impl TerminalView {
                 Button::WheelDown
             };
             for _ in 0..steps.unsigned_abs() {
-                self.report(Some(turn), Gesture::Press, cell, &event.modifiers, tracking);
+                self.report(
+                    Some(turn),
+                    Gesture::Press,
+                    cell,
+                    &event.modifiers,
+                    tracking,
+                    cx,
+                );
             }
         } else if mode.contains(TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL) {
             let arrow: &[u8] = match (steps > 0, mode.contains(TermMode::APP_CURSOR)) {
@@ -448,6 +473,7 @@ impl TerminalView {
                 (false, true) => b"\x1bOB",
                 (false, false) => b"\x1b[B",
             };
+            self.ai_human(cx);
             self.pty.write(arrow.repeat(steps.unsigned_abs() as usize));
         } else {
             self.pty.term.lock().scroll_display(Scroll::Delta(steps));

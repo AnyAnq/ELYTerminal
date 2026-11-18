@@ -28,6 +28,10 @@ pub const FIND_INPUT: &str = "TerminalFind > ElyInput";
 impl TerminalView {
     /// Bytes from the keyboard: back to the newest line, no selection, then to the program, which sees done and error records.
     pub(super) fn input(&mut self, bytes: Vec<u8>, cx: &mut Context<Self>) {
+        self.ai_human(cx);
+        if self.ai_buffer(&bytes) {
+            return;
+        }
         let mut term = self.pty.term.lock();
         term.scroll_display(Scroll::Bottom);
         if term.selection.take().is_some() {
@@ -48,6 +52,7 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) {
         log::trace!("terminal {}: key down {:?}", self.pty.pid, event.keystroke);
+        self.ai_human(cx);
         if event.prefer_character_input {
             log::debug!(
                 "terminal {}: {:?} types through the layout, a dead key or a character its modifiers make",
@@ -64,7 +69,17 @@ impl TerminalView {
         };
         let id = held(&event.keystroke, facts);
         let prior = self.held.get(&id).copied();
+        self.agent.writing = self.agent.takeover.is_some()
+            && event.keystroke.modifiers.control
+            && event.keystroke.key == "c";
         let went = self.send(&event.keystroke, action, facts, prior, cx);
+        self.agent.writing = false;
+        if went.is_some()
+            && event.keystroke.key == "enter"
+            && event.keystroke.modifiers == Default::default()
+        {
+            self.cmd_submitted();
+        }
         self.held.insert(id, went.unwrap_or(Went::Bytes));
         if went.is_some() {
             cx.stop_propagation();
@@ -97,6 +112,25 @@ impl TerminalView {
 
     /// Presses and lets go of `keystroke`, as the keyboard would; false when it is text, which goes nowhere.
     pub(super) fn press(&mut self, keystroke: &Keystroke, cx: &mut Context<Self>) -> bool {
+        #[cfg(windows)]
+        if self.win32
+            && !self
+                .pty
+                .term
+                .lock()
+                .mode()
+                .intersects(TermMode::KITTY_KEYBOARD_PROTOCOL)
+        {
+            let Some(down) = super::win32::synthetic(keystroke, Action::Press) else {
+                return false;
+            };
+            let Some(up) = super::win32::synthetic(keystroke, Action::Release) else {
+                return false;
+            };
+            self.input(down, cx);
+            self.input(up, cx);
+            return true;
+        }
         let facts = Facts::default();
         let Some(went) = self.send(keystroke, Action::Press, facts, None, cx) else {
             return false;
@@ -371,6 +405,7 @@ impl EntityInputHandler for TerminalView {
         cx: &mut Context<Self>,
     ) {
         log::debug!("terminal {}: composing {text:?}", self.pty.pid);
+        self.ai_human(cx);
         self.marked = (!text.is_empty()).then(|| text.to_string());
         cx.notify();
     }

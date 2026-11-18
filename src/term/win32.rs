@@ -20,6 +20,42 @@ use super::keys::Action;
 /// The mode ConPTY sets, `CSI ? 9001 h`.
 pub const MODE: u32 = 9001;
 
+pub fn synthetic(keystroke: &Keystroke, action: Action) -> Option<Vec<u8>> {
+    let (key, enhanced) = virtual_key(&keystroke.key)?;
+    let scan = unsafe { MapVirtualKeyW(u32::from(key), MAPVK_VK_TO_VSC) };
+    let modifiers = keystroke.modifiers;
+    let mut control = u32::from(enhanced) * ENHANCED_KEY;
+    if modifiers.control {
+        control |= LEFT_CTRL_PRESSED;
+    }
+    if modifiers.alt {
+        control |= LEFT_ALT_PRESSED;
+    }
+    if modifiers.shift {
+        control |= SHIFT_PRESSED;
+    }
+    let unit = match keystroke.key.as_str() {
+        "enter" => 13,
+        "tab" => 9,
+        "escape" => 27,
+        "backspace" => 8,
+        _ if modifiers.control
+            && keystroke.key.len() == 1
+            && keystroke.key.as_bytes()[0].is_ascii_alphabetic() =>
+        {
+            u16::from(keystroke.key.as_bytes()[0].to_ascii_uppercase() - b'A' + 1)
+        }
+        _ => keystroke
+            .key_char
+            .as_deref()
+            .or_else(|| (keystroke.key.chars().count() == 1).then_some(keystroke.key.as_str()))
+            .and_then(|text| text.encode_utf16().next())
+            .unwrap_or(0),
+    };
+    let down = u8::from(action != Action::Release);
+    Some(format!("\x1b[{key};{scan};{unit};{down};{control};1_").into_bytes())
+}
+
 /// `keystroke` as ConPTY reads it, `CSI Vk ; Sc ; Uc ; Kd ; Cs ; Rc _`; none for a key no virtual key names.
 pub fn record(keystroke: &Keystroke, action: Action) -> Option<Vec<u8>> {
     let (key, enhanced) = virtual_key(&keystroke.key)?;
@@ -138,6 +174,25 @@ fn control(enhanced: bool) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn synthetic_ctrl_c_uses_its_own_modifiers_without_a_physical_ctrl_key() {
+        let key = Keystroke::parse("ctrl-c").unwrap();
+        let record = String::from_utf8(synthetic(&key, Action::Press).unwrap()).unwrap();
+        let fields: Vec<_> = record
+            .trim_start_matches("\x1b[")
+            .trim_end_matches('_')
+            .split(';')
+            .collect();
+        assert_eq!(fields[2], "3");
+        assert_eq!(
+            fields[4].parse::<u32>().unwrap() & LEFT_CTRL_PRESSED,
+            LEFT_CTRL_PRESSED
+        );
+        assert_eq!(fields[3], "1");
+        let released = String::from_utf8(synthetic(&key, Action::Release).unwrap()).unwrap();
+        assert!(released.contains(";3;0;"));
+    }
 
     #[test]
     fn named_keys_and_letters_find_their_virtual_keys() {

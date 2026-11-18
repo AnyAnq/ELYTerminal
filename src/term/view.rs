@@ -48,8 +48,7 @@ use crate::{settings::SettingsStore, themes};
 /// How long the cursor shows, then hides, while it blinks.
 pub const BLINK: Duration = Duration::from_millis(600);
 
-/// How long the cursor glides to a new cell.
-const GLIDE: Duration = Duration::from_millis(90);
+mod cursor;
 
 /// What a terminal tells its owner.
 #[derive(Clone, Debug, PartialEq)]
@@ -65,11 +64,13 @@ pub enum TerminalEvent {
     /// A Files node's drag landed on it: the node's tree key.
     Dragged(SharedString),
     Focused,
+    Taken,
 }
 
 /// A program on a pseudo-terminal, drawn cell by cell in the theme and font the settings choose.
 pub struct TerminalView {
     pub(super) pty: Pty,
+    pub(super) agent: super::assistant::Control,
     pub(super) focus: FocusHandle,
     /// Text an input method is composing, drawn at the cursor.
     pub(super) marked: Option<String>,
@@ -156,8 +157,15 @@ impl TerminalView {
         let focus = cx.focus_handle().tab_stop(true);
         let refocus =
             |view: &mut Self, window: &mut Window, cx: &mut Context<Self>| view.refocus(window, cx);
+        let settings = SettingsStore::get(cx);
+        let mut terminal_options = (
+            settings.scrollback,
+            settings.cursor_style,
+            settings.cursor_blink,
+        );
         Self {
             pty,
+            agent: Default::default(),
             _focus: [
                 cx.observe_window_activation(window, refocus),
                 cx.on_focus(&focus, window, refocus),
@@ -200,12 +208,18 @@ impl TerminalView {
             stirred: Instant::now(),
             offset: 0,
             _herdr: super::herdr::follow(cx),
-            _settings: cx.observe_global::<SettingsStore>(|view, cx| {
-                view.pty
-                    .term
-                    .lock()
-                    .set_options(config(SettingsStore::get(cx)));
-                view.search(false, cx);
+            _settings: cx.observe_global::<SettingsStore>(move |view, cx| {
+                let settings = SettingsStore::get(cx);
+                let next = (
+                    settings.scrollback,
+                    settings.cursor_style,
+                    settings.cursor_blink,
+                );
+                if next != terminal_options {
+                    terminal_options = next;
+                    view.pty.term.lock().set_options(config(settings));
+                    view.search(false, cx);
+                }
                 cx.notify();
             }),
             _zoom: cx.observe_global::<zoom::Enlarged>(|_, cx| cx.notify()),
@@ -214,35 +228,6 @@ impl TerminalView {
 
     pub fn pid(&self) -> u32 {
         self.pty.pid
-    }
-
-    /// Where the cursor is drawn on its way to `to`, in cells.
-    pub(super) fn glide_position(&self, to: (usize, usize)) -> (f32, f32) {
-        let end = (to.0 as f32, to.1 as f32);
-        match self.glide {
-            Some((from, start)) if self.target == Some(to) => {
-                let t = start.elapsed().as_secs_f32() / GLIDE.as_secs_f32();
-                if t >= 1. {
-                    return end;
-                }
-                let e = t * t * (3. - 2. * t);
-                (from.0 + (end.0 - from.0) * e, from.1 + (end.1 - from.1) * e)
-            }
-            _ => end,
-        }
-    }
-
-    /// Starts a glide from where the cursor is drawn when its cell changes.
-    fn follow(&mut self, target: Option<(usize, usize)>, smooth: bool) {
-        match (self.target, target) {
-            (_, None) => self.glide = None,
-            (Some(from), Some(to)) if smooth && from != to => {
-                self.glide = Some((self.glide_position(from), Instant::now()));
-            }
-            (_, Some(_)) if !smooth => self.glide = None,
-            _ => {}
-        }
-        self.target = target;
     }
 
     /// What programs in this terminal say they are doing.

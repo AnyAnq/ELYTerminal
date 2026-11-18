@@ -9,6 +9,7 @@ pub enum Mark {
     Output,
     /// The command ended, with the status it gave: D.
     Done(Option<i32>),
+    Command(u64, Option<i32>),
 }
 
 /// How the line a prompt reads takes a click, as its start's `click_events` says.
@@ -42,6 +43,17 @@ pub(crate) fn read(body: &[u8]) -> Option<Mark> {
         b'B' | b'I' => Some(Mark::Input),
         b'C' => Some(Mark::Output),
         b'D' => Some(Mark::Done(status(options))),
+        b'X' => {
+            let text = std::str::from_utf8(options).ok()?;
+            let (id, status) = text.split_once(';')?;
+            let id = u64::from_str_radix(id, 16).ok()?;
+            let code = if status == "start" {
+                None
+            } else {
+                Some(status.parse().ok()?)
+            };
+            Some(Mark::Command(id, code))
+        }
         // L's fresh line needs the cursor, unseen before the parser; P adds nothing to A.
         b'L' | b'P' => {
             log::debug!("pty: OSC 133;{} takes no action here", shown());

@@ -65,7 +65,8 @@ pub struct Pet {
     anchor: Option<Point<Pixels>>,
     /// How far in from the pane's left edge she stands, and a drag under way: the pointer's x where it began and where she stood then.
     at: f32,
-    drag: Option<(f32, f32)>,
+    drag: Option<(f32, f32, Pixels)>,
+    dragged: bool,
     main: WindowHandle<Workspace>,
     /// What keeps her window on the main window's edge, where the platform does not.
     glue: Option<platform::Glue>,
@@ -201,7 +202,8 @@ fn show(main: WindowHandle<Workspace>, cx: &mut App) -> anyhow::Result<WindowHan
             workspace
                 .sessions()
                 .iter()
-                .filter_map(|session| session.looks(cx)),
+                .filter_map(|session| session.looks(cx))
+                .chain(workspace.ai_look(cx)),
         )
     };
     let start = feeling(workspace.read(cx), cx);
@@ -233,6 +235,7 @@ fn show(main: WindowHandle<Workspace>, cx: &mut App) -> anyhow::Result<WindowHan
                 anchor: wayland.then_some(spot),
                 at: kept,
                 drag: None,
+                dragged: false,
                 main,
                 glue: None,
                 _watch: vec![feel],
@@ -363,19 +366,20 @@ impl Pet {
     }
 
     /// Takes hold of her for a drag along her edge, the pointer `local` in her window.
-    fn grab(&mut self, local: Pixels, scale: f32) {
-        match self.pointer(local, scale) {
-            Ok(x) => self.drag = Some((x, self.at)),
+    fn grab(&mut self, local: Point<Pixels>, scale: f32) {
+        self.dragged = false;
+        match self.pointer(local.x, scale) {
+            Ok(x) => self.drag = Some((x, self.at, local.y)),
             Err(error) => log::error!("{error:#}"),
         }
     }
 
     /// Moves her along her edge after the pointer, inside the pane.
-    fn slide(&mut self, local: Pixels, scale: f32, cx: &mut App) {
-        let Some((from, at)) = self.drag else {
+    fn slide(&mut self, local: Point<Pixels>, scale: f32, cx: &mut App) {
+        let Some((from, at, y)) = self.drag else {
             return;
         };
-        let x = match self.pointer(local, scale) {
+        let x = match self.pointer(local.x, scale) {
             Ok(x) => x,
             Err(error) => {
                 self.drag = None;
@@ -383,6 +387,10 @@ impl Pet {
             }
         };
         let main = self.main;
+        if !self.dragged && (x - from).abs() < 4.0 && f32::from(local.y - y).abs() < 4.0 {
+            return;
+        }
+        self.dragged = true;
         let slid = main.update(cx, |_, main, _| {
             let room = (f32::from(pane(main).size.width) - WIDTH).max(0.0);
             // Whole points, so the kept place carries no float noise.
@@ -396,7 +404,21 @@ impl Pet {
 
     /// Lets go of her, the settings keeping where the drag left her, where a Wayland popup then opens again.
     fn release(&mut self, cx: &mut App) {
-        if self.drag.take().is_none() || SettingsStore::get(cx).ely_left == self.at {
+        if self.drag.take().is_none() {
+            return;
+        }
+        if !self.dragged {
+            let main = self.main;
+            cx.defer(move |cx| {
+                if let Err(error) =
+                    main.update(cx, |workspace, window, cx| workspace.toggle_ai(window, cx))
+                {
+                    log::error!("pet: AI panel did not open: {error}");
+                }
+            });
+            return;
+        }
+        if SettingsStore::get(cx).ely_left == self.at {
             return;
         }
         let at = self.at;
@@ -450,7 +472,7 @@ impl Render for Pet {
                 window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
                     if phase == DispatchPhase::Bubble && event.dragging() {
                         let scale = window.scale_factor();
-                        held.update(cx, |pet, cx| pet.slide(event.position.x, scale, cx));
+                        held.update(cx, |pet, cx| pet.slide(event.position, scale, cx));
                     }
                 });
                 window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
@@ -464,7 +486,7 @@ impl Render for Pet {
             MouseButton::Left,
             cx.listener(|pet, event: &MouseDownEvent, window, cx| {
                 pet.press(Instant::now());
-                pet.grab(event.position.x, window.scale_factor());
+                pet.grab(event.position, window.scale_factor());
                 cx.notify();
             }),
         )

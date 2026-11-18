@@ -51,6 +51,7 @@ impl TerminalView {
         let mut bytes = text.as_bytes().to_vec();
         bytes.push(b'\r');
         self.input(bytes, cx);
+        self.cmd_submitted();
     }
 
     /// Presses each of `keys`, named as gpui names them; a key that types text is refused before any is pressed.
@@ -71,10 +72,17 @@ impl TerminalView {
             self.pty.pid
         );
         for (key, stroke) in keys.iter().zip(&strokes) {
-            anyhow::ensure!(
-                self.press(stroke, cx),
-                "{key} names no key the terminal sends"
-            );
+            let interrupt = stroke.modifiers.control && stroke.key == "c";
+            if interrupt {
+                self.ai_human(cx);
+                self.agent.writing = true;
+            }
+            let sent = self.press(stroke, cx);
+            self.agent.writing = false;
+            anyhow::ensure!(sent, "{key} names no key the terminal sends");
+            if stroke.key == "enter" && stroke.modifiers == Default::default() {
+                self.cmd_submitted();
+            }
         }
         Ok(())
     }

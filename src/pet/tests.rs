@@ -20,6 +20,7 @@ fn ely(mood: Mood, since: Instant) -> Pet {
         anchor: None,
         at: 140.0,
         drag: None,
+        dragged: false,
         main: WindowHandle::new(WindowId::from(1)),
         glue: None,
         _watch: Vec::new(),

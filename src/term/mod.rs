@@ -1,3 +1,4 @@
+pub(crate) mod assistant;
 mod boxes;
 mod busy;
 mod cd;

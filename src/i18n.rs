@@ -8,14 +8,22 @@ use crate::{
     settings::{Language, SettingsStore},
 };
 
+mod ai;
 mod en;
 mod zh;
+
+fn english() -> Vec<(&'static str, &'static str)> {
+    en::MESSAGES.iter().chain(ai::EN).copied().collect()
+}
+fn chinese() -> Vec<(&'static str, &'static str)> {
+    zh::MESSAGES.iter().chain(ai::ZH).copied().collect()
+}
 
 /// Every catalog, `language` shown; each must hold English's keys.
 pub fn catalogs(language: Language) -> I18n {
     I18n::new(language.tag())
-        .catalog(Language::English.tag(), en::MESSAGES)
-        .catalog(Language::SimplifiedChinese.tag(), zh::MESSAGES)
+        .catalog(Language::English.tag(), &english())
+        .catalog(Language::SimplifiedChinese.tag(), &chinese())
 }
 
 /// Speaks the settings' language everywhere, and follows its changes.
@@ -72,7 +80,7 @@ mod tests {
         for language in [Language::English, Language::SimplifiedChinese] {
             assert_eq!(catalogs(language).locale().tag, language.tag());
         }
-        for ((key, english), (other, chinese)) in en::MESSAGES.iter().zip(zh::MESSAGES) {
+        for ((key, english), (other, chinese)) in english().into_iter().zip(chinese()) {
             assert_eq!(key, other, "both catalogs list their keys in one order");
             assert_eq!(names(english), names(chinese), "{key}");
         }
@@ -87,10 +95,7 @@ mod tests {
             &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
             &mut keys,
         );
-        let listed: BTreeSet<String> = en::MESSAGES
-            .iter()
-            .map(|(key, _)| key.to_string())
-            .collect();
+        let listed: BTreeSet<String> = english().iter().map(|(key, _)| key.to_string()).collect();
         assert_eq!(keys, listed);
     }
 }

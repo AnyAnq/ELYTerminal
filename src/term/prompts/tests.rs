@@ -71,7 +71,7 @@ fn the_rewrite_reads_a_mark_as_the_session_hears_it() {
         let heard = marks::read(body.as_bytes()).map(|mark| match mark {
             Mark::Prompt(_) => Edge::Prompt,
             Mark::Input => Edge::Input,
-            Mark::Output | Mark::Done(_) => Edge::End,
+            Mark::Output | Mark::Done(_) | Mark::Command(..) => Edge::End,
         });
         assert_eq!(mark(body.as_bytes()), heard, "{body}");
     }

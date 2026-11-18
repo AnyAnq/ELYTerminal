@@ -19,6 +19,14 @@ pub struct SettingsStore {
 impl Global for SettingsStore {}
 
 impl SettingsStore {
+    #[cfg(test)]
+    pub(crate) fn fixture(settings: Settings, path: PathBuf, cx: &mut App) -> anyhow::Result<()> {
+        settings.validate()?;
+        fonts(&settings, cx)?;
+        cx.set_global(Self { settings, path });
+        Ok(())
+    }
+
     /// Loads `settings.json` from the platform config folder into the app.
     pub fn init(cx: &mut App) -> anyhow::Result<()> {
         let folder = dirs::config_dir().context("settings: the platform names no config folder")?;

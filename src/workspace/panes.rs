@@ -98,6 +98,8 @@ impl Workspace {
         }
         let gone = session.panes.remove(pane);
         assert!(session.layout.remove(gone.id()), "a laid out pane");
+        self.assistant
+            .update(cx, |assistant, cx| assistant.pane_closed(gone.id(), cx));
         // Its textures leave the window's atlas with it.
         gone.terminal
             .update(cx, |view, _| view.set_front(false, window));

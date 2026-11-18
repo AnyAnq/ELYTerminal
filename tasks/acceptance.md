@@ -268,6 +268,22 @@ What no check reached: issue #29's physical keyboard and fcitx5's own forwarding
 | Homebrew and winget; SmartScreen told from Defender | T136 | the 0.2.0 cask passed `brew style` and `brew audit --online` and installed and uninstalled from a throwaway tap; `winget validate` passed on the owner's PC; winget installs once Microsoft merges the manifest's pull request, made at the release | Pass |
 | A Windows installer from NSIS | T181 | on the Windows PC `scripts/windows-installer.ps1` built an 8 MB setup; a silent install put down the four files and the uninstaller, the uninstall key at version and folder, and the Start menu entry; a silent uninstall removed them; a first folder's uninstaller left a second install's shortcut and key, setup into a folder whose `uninstall.exe` is a directory stopped with exit 2 and no key, and an uninstall with `conpty.dll` held stopped with exit 2, key kept, then ran clean | Pass |
 
+## 16. AI assistant
+
+| Requirement | Task | Evidence | Result |
+|---|---|---|---|
+| Git approval, PowerShell continuation, current directory and pane cleanup | T209 | Policy tests cover Git with Auto allow on and off. Windows native fixtures cover continuation input, reading a file from the new directory on the next request, and conversation cleanup with approval pending. | Pass on Windows |
+| Auto allow beside the assistant model selector | T208 | Native mouse toggles and persisted on/off values, pending approval resumes, English/Chinese assistant screenshots; history and model-dropdown regression | Pass on Windows native fixture |
+| Optional model approval hint retains application approval policy | T207 | Exact missing-field reproduction followed by validation/policy regression; Windows PowerShell native execution, refusal and automatic approval with omitted hints | Pass locally and on Windows native fixture |
+| Copy AI text and recall editable prompts | T206 | Full message/tool/note and Unicode chunk tests; Windows native copy-button click, selected text Ctrl+C and clipboard round trips; Alt+Up/Down and button recall preserve draft and focus, plain Up moves the caret, no request is sent | Pass on Windows native fixture |
+| Automatic approval and AI responsiveness | T205 | Default/manual approval and refusal retained; enabling the saved switch resumes pending approval and executes two isolated copy commands; long-reply native frame benchmark and complete UTF-8 row coverage | Pass on Windows native fixture |
+| Composer mouse focus and DeepSeek thinking tools | T204 | Native mouse click followed by a key updates the AI input; simulated thinking API rejects forced tool choice and requires returned reasoning; configured deepseek/deepseek-v4-flash passes a live chat/tool/result cycle | Pass on Windows and configured service |
+| Model configuration, streamed chat, tool capability test and keyless services | T203 | Local HTTP fixture verifies UTF-8 streaming, headers, an actual function call and the reply to its result; public settings reject credential fields; native fixture writes, reads and removes a unique test entry in the Windows credential store and captures English/Chinese settings pages | Pass locally; configured DeepSeek service also verified by T204 |
+| Project diagnosis, exact edit and terminal verification | T203 | Native GPUI/ConPTY fixture runs a failing `cargo test`, reads and repairs its source, and verifies a zero exit; PowerShell, pwsh and cmd | Pass on Windows |
+| Nonempty prompt cancellation and manual takeover | T203 | Fixture starts with an unfinished line, then interrupts a 30-second command and executes buffered manual input within five seconds | Pass on Windows |
+| High-impact approval, refusal and 30-call continuation | T203 | Deterministic command policy tests; native fixture pauses at 30 tool replies, continues on request, and keeps a file a declined deletion would remove | Pass locally |
+| Pet click/drag distinction, panel lifecycle, pane binding and language | T203 | Source integration plus native panel screenshots; full app pet gestures and non-Windows windows not driven | Implemented; gesture validation pending |
+
 ## CI notes
 
 On 2026-10-15 every job first failed on its runner, not on the code. With the owner's leave, each runner was put right:

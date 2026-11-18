@@ -35,25 +35,36 @@ actions!(elyterminal, [OpenSettings, CloseSettings]);
 pub const CONTEXT: &str = "Settings";
 
 /// Each category's key, its name's key and its icon.
-const SECTIONS: [(&str, &str, IconName); 2] = [
+const SECTIONS: [(&str, &str, IconName); 3] = [
     ("appearance", "et.settings.appearance", IconName::Palette),
     ("terminal", "et.settings.terminal", IconName::Terminal),
+    ("ai", "et.ai.models", IconName::Settings),
 ];
 
 /// Answers Open Settings from any window.
 pub fn init(cx: &mut App) {
-    cx.on_action(|_: &OpenSettings, cx| open_window(cx));
+    cx.on_action(|_: &OpenSettings, cx| open_window(None, cx));
+}
+
+pub fn open_ai(cx: &mut App) {
+    open_window(Some("ai"), cx);
 }
 
 /// Opens the settings window, or brings the open one forward.
-fn open_window(cx: &mut App) {
+fn open_window(section: Option<&'static str>, cx: &mut App) {
     let open = cx
         .windows()
         .into_iter()
         .find_map(|window| window.downcast::<SettingsWindow>());
     if let Some(window) = open {
         log::info!("settings: the window comes forward");
-        let forward = window.update(cx, |_, window, _| window.activate_window());
+        let forward = window.update(cx, |settings, window, cx| {
+            if let Some(section) = section {
+                settings.section = section.into();
+                cx.notify();
+            }
+            window.activate_window();
+        });
         if let Err(error) = forward {
             log::error!("settings: the window did not come forward: {error:#}");
         }
@@ -73,7 +84,13 @@ fn open_window(cx: &mut App) {
     };
     match cx.open_window(options, |window, cx| {
         window.set_app_id(APP_ID);
-        cx.new(|cx| SettingsWindow::new(window, cx))
+        cx.new(|cx| {
+            let mut settings = SettingsWindow::new(window, cx);
+            if let Some(section) = section {
+                settings.section = section.into();
+            }
+            settings
+        })
     }) {
         Ok(_) => log::info!("settings: the window opens"),
         Err(error) => log::error!("settings: the window did not open: {error:#}"),
@@ -82,6 +99,7 @@ fn open_window(cx: &mut App) {
 
 /// The settings window: categories in one column, the open one's rows in the next, each scrolling on its own.
 pub struct SettingsWindow {
+    ai: Entity<crate::ai::settings::Editor>,
     focus: FocusHandle,
     section: SharedString,
     shell: Entity<TextInput>,
@@ -125,6 +143,7 @@ pub struct SettingsWindow {
 
 impl SettingsWindow {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let ai = cx.new(|cx| crate::ai::settings::Editor::new(window, cx));
         let shell = cx.new(|cx| {
             let placeholder = text(cx, "et.settings.login_shell", &[]);
             let mut input = TextInput::new(window, cx).placeholder(placeholder);
@@ -172,6 +191,7 @@ impl SettingsWindow {
             folder,
             search,
             recording: None,
+            ai,
             key_refused: None,
             refused: None,
             refused_folder: None,
@@ -391,6 +411,7 @@ impl Render for SettingsWindow {
                 self.appearance(window, cx).into_any_element()
             }
             "terminal" => self.terminal(cx).into_any_element(),
+            "ai" => self.ai.clone().into_any_element(),
             other => unreachable!("settings: no section {other}"),
         };
         let page = div()
