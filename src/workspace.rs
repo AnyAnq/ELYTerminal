@@ -282,11 +282,6 @@ impl Workspace {
         }
     }
 
-    /// Its sessions, in their rows' order.
-    pub fn sessions(&self) -> &[Session] {
-        &self.sessions
-    }
-
     /// What the shown session is called.
     fn title(&self) -> &str {
         self.sessions.get(self.active).map_or(TITLE, Session::named)

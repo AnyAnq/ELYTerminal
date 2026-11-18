@@ -5,7 +5,7 @@ use gpui::{Context, EntityId, Window};
 
 use super::Workspace;
 use crate::{
-    sessions::Program,
+    sessions::{Program, Session},
     settings::{self, SettingsStore, StartIn},
     term::{
         Events, Launch, Pty, config,
@@ -15,6 +15,16 @@ use crate::{
 };
 
 impl Workspace {
+    /// Its sessions, in their rows' order.
+    pub fn sessions(&self) -> &[Session] {
+        &self.sessions
+    }
+
+    /// The session shown, at its place in the sessions' rows.
+    pub fn shown(&self) -> usize {
+        self.active
+    }
+
     /// A session of the set shell, where Start in says.
     pub(super) fn new_session(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(start) = self.start_in(cx) else {

@@ -1,5 +1,6 @@
 //! Ely, the icon's girl, peeking over the main window's top edge from a window of her own, or up from its bottom edge where no room lies above.
 
+mod drag;
 mod look;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -17,8 +18,9 @@ use std::{cell::RefCell, rc::Rc, time::Instant};
 use gpui::{
     App, AppContext as _, Bounds, ContentMask, Context, DispatchPhase, InteractiveElement,
     IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
-    Point, Render, Styled, Subscription, Window, WindowBackgroundAppearance, WindowBounds,
-    WindowHandle, WindowKind, WindowOptions, canvas, div, point, popup, px, size,
+    Point, Render, StatefulInteractiveElement as _, Styled, Subscription, Window,
+    WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions, canvas, div,
+    point, popup, px, size,
 };
 
 #[cfg(target_os = "macos")]
@@ -28,10 +30,10 @@ use self::windows as platform;
 #[cfg(target_os = "linux")]
 use self::x11 as platform;
 use self::{
-    look::{Act, EASE, Mood, Pose, blend, mood, pose},
+    look::{Act, EASE, LOW, Mood, Pose, blend, mood, pose},
     rig::Rig,
 };
-use crate::{settings::SettingsStore, workspace::Workspace};
+use crate::{sessions::orb::Look, settings::SettingsStore, workspace::Workspace};
 
 /// Her head's box, in points, and the room above it her hops take.
 const WIDTH: f32 = 112.0;
@@ -47,7 +49,7 @@ enum Edge {
 /// The window she shows in, which the settings open and close.
 type Shown = Rc<RefCell<Option<WindowHandle<Pet>>>>;
 
-/// Ely in her window: she moves all the time, her acts follow the sessions' marks, and a press pets her.
+/// Ely in her window: she moves all the time, her acts follow the shown session's mark, and a press pets her.
 pub struct Pet {
     rig: Rc<Rig>,
     mood: Mood,
@@ -63,10 +65,13 @@ pub struct Pet {
     edge: Edge,
     rise: f32,
     anchor: Option<Point<Pixels>>,
-    /// How far in from the pane's left edge she stands, and a drag under way: the pointer's x where it began and where she stood then.
+    /// How far in from the pane's left edge she stands.
     at: f32,
     drag: Option<(f32, f32, Pixels)>,
     dragged: bool,
+    /// The pointer is over her window, and she sinks to her hair while the settings ask and it is not.
+    hovered: bool,
+    low: bool,
     main: WindowHandle<Workspace>,
     /// What keeps her window on the main window's edge, where the platform does not.
     glue: Option<platform::Glue>,
@@ -197,15 +202,6 @@ fn show(main: WindowHandle<Workspace>, cx: &mut App) -> anyhow::Result<WindowHan
         ..Default::default()
     };
     let workspace = main.entity(cx)?;
-    let feeling = |workspace: &Workspace, cx: &App| {
-        mood(
-            workspace
-                .sessions()
-                .iter()
-                .filter_map(|session| session.looks(cx))
-                .chain(workspace.ai_look(cx)),
-        )
-    };
     let start = feeling(workspace.read(cx), cx);
     let pet = cx.open_window(options, |window, cx| {
         if skirt > 0.0 {
@@ -236,6 +232,8 @@ fn show(main: WindowHandle<Workspace>, cx: &mut App) -> anyhow::Result<WindowHan
                 at: kept,
                 drag: None,
                 dragged: false,
+                hovered: false,
+                low: false,
                 main,
                 glue: None,
                 _watch: vec![feel],
@@ -254,6 +252,30 @@ fn show(main: WindowHandle<Workspace>, cx: &mut App) -> anyhow::Result<WindowHan
         "pet: Ely peeks over the main window, {way}, on the pane's {edge} edge, feeling {start:?}"
     );
     Ok(pet)
+}
+
+/// The most pressing mood of the shown session and AI task.
+fn feeling(workspace: &Workspace, cx: &App) -> Mood {
+    shown_mood(
+        workspace.sessions().iter().map(|session| session.looks(cx)),
+        workspace.shown(),
+        workspace.ai_look(cx),
+    )
+}
+
+fn shown_mood(
+    mut looks: impl Iterator<Item = Option<Look>>,
+    shown: usize,
+    assistant: Option<Look>,
+) -> Mood {
+    looks
+        .nth(shown)
+        .flatten()
+        .into_iter()
+        .chain(assistant)
+        .map(mood)
+        .max()
+        .unwrap_or(Mood::Calm)
 }
 
 /// Keeps her window on `main`'s pane as it moves, comes forward and hides, and gives the edge she first stands on.
@@ -333,6 +355,9 @@ impl Pet {
             since(self.shown),
             self.petted.map(since),
         );
+        if self.low {
+            pose.lift -= LOW;
+        }
         if pose.act != self.act {
             log::debug!("pet: Ely goes from {:?} to {:?}", self.act, pose.act);
             self.act = pose.act;
@@ -365,77 +390,6 @@ impl Pet {
         }
     }
 
-    /// Takes hold of her for a drag along her edge, the pointer `local` in her window.
-    fn grab(&mut self, local: Point<Pixels>, scale: f32) {
-        self.dragged = false;
-        match self.pointer(local.x, scale) {
-            Ok(x) => self.drag = Some((x, self.at, local.y)),
-            Err(error) => log::error!("{error:#}"),
-        }
-    }
-
-    /// Moves her along her edge after the pointer, inside the pane.
-    fn slide(&mut self, local: Point<Pixels>, scale: f32, cx: &mut App) {
-        let Some((from, at, y)) = self.drag else {
-            return;
-        };
-        let x = match self.pointer(local.x, scale) {
-            Ok(x) => x,
-            Err(error) => {
-                self.drag = None;
-                return log::error!("{error:#}");
-            }
-        };
-        let main = self.main;
-        if !self.dragged && (x - from).abs() < 4.0 && f32::from(local.y - y).abs() < 4.0 {
-            return;
-        }
-        self.dragged = true;
-        let slid = main.update(cx, |_, main, _| {
-            let room = (f32::from(pane(main).size.width) - WIDTH).max(0.0);
-            // Whole points, so the kept place carries no float noise.
-            self.at = (at + x - from).round().clamp(0.0, room.floor());
-            self.place(main);
-        });
-        if let Err(error) = slid {
-            log::debug!("pet: the main window does not read: {error:#}");
-        }
-    }
-
-    /// Lets go of her, the settings keeping where the drag left her, where a Wayland popup then opens again.
-    fn release(&mut self, cx: &mut App) {
-        if self.drag.take().is_none() {
-            return;
-        }
-        if !self.dragged {
-            let main = self.main;
-            cx.defer(move |cx| {
-                if let Err(error) =
-                    main.update(cx, |workspace, window, cx| workspace.toggle_ai(window, cx))
-                {
-                    log::error!("pet: AI panel did not open: {error}");
-                }
-            });
-            return;
-        }
-        if SettingsStore::get(cx).ely_left == self.at {
-            return;
-        }
-        let at = self.at;
-        match SettingsStore::update(cx, |settings| settings.ely_left = at) {
-            Ok(()) => log::info!("pet: Ely stands {at} points in from the pane's left edge"),
-            Err(error) => log::error!("pet: where Ely stands is not kept: {error:#}"),
-        }
-    }
-
-    /// The pointer's x in points: on the screen where her glue moves her window, else in her window, which a drag leaves in place.
-    fn pointer(&self, local: Pixels, scale: f32) -> anyhow::Result<f32> {
-        match &self.glue {
-            Some(glue) => glue.pointer(scale),
-            None => Ok(local.into()),
-        }
-    }
-
     #[cfg(target_os = "linux")]
     fn shown(&mut self, visible: bool, main: &Window) {
         if let Some(glue) = &self.glue {
@@ -452,6 +406,14 @@ impl Pet {
 
 impl Render for Pet {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Windows' mouse leave sends gpui no exit, so there the window's own hover gates hers.
+        let over = self.hovered && (cfg!(not(windows)) || window.is_window_hovered());
+        let low = SettingsStore::get(cx).ely_low && !over;
+        if low != self.low {
+            log::debug!("pet: Ely peeks {}", if low { "low" } else { "whole" });
+            self.low = low;
+            self.ease(Instant::now());
+        }
         let pose = self.pose(Instant::now());
         // gpui gives a hidden window no frames, so she rests while unseen.
         window.request_animation_frame();
@@ -482,13 +444,18 @@ impl Render for Pet {
                 });
             },
         );
-        div().size_full().child(drawn.size_full()).on_mouse_down(
-            MouseButton::Left,
-            cx.listener(|pet, event: &MouseDownEvent, window, cx| {
-                pet.press(Instant::now());
-                pet.grab(event.position, window.scale_factor());
-                cx.notify();
-            }),
-        )
+        div()
+            .id("ely")
+            .size_full()
+            .child(drawn.size_full())
+            .on_hover(cx.listener(|pet, hovered: &bool, _, _| pet.hovered = *hovered))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|pet, event: &MouseDownEvent, window, cx| {
+                    pet.press(Instant::now());
+                    pet.grab(event.position, window.scale_factor());
+                    cx.notify();
+                }),
+            )
     }
 }
