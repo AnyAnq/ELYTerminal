@@ -19,7 +19,7 @@ use crate::{
     files::{Files, Here},
     git::panel::{Acted, GitPanel},
     menus,
-    sessions::{self, Layout, Program, Session, orb},
+    sessions::{Layout, Program, Session, orb},
     settings::{PanelTab, SettingsStore, window::OpenSettings},
     term::{Events, Launch, Pty},
 };
@@ -28,17 +28,20 @@ mod assistant;
 mod control;
 mod events;
 mod folder;
+mod groups;
 mod leave;
 mod panel;
 mod panes;
 mod rename;
 mod reorder;
+mod restore;
 mod session;
 mod toggles;
 mod wallpaper;
 mod widths;
 
 pub use leave::Leave;
+pub use restore::Keeps;
 use toggles::column_toggle;
 use widths::{Dragged, Side};
 
@@ -58,6 +61,11 @@ actions!(
         PreviousPane
     ]
 );
+
+/// Swaps the shown pane with its neighbor toward a side, as Windows Terminal's `swapPane`.
+#[derive(Clone, Debug, PartialEq, Action)]
+#[action(namespace = elyterminal, no_json)]
+pub struct MovePane(pub crate::sessions::Toward);
 
 /// Shows the session at this place, from 0; past the last one, the key goes on to the program.
 #[derive(Clone, Debug, PartialEq, Action)]
@@ -92,6 +100,9 @@ pub struct Workspace {
     folder_actions: bool,
     /// A close that waits for the user's word, and the programs it would end.
     leaving: Option<(Leave, Vec<String>)>,
+    /// The sessions' groups, in the order their rows show.
+    groups: Vec<groups::Group>,
+    kept: restore::Kept,
     _settings: Subscription,
     _acted: Subscription,
     _here: Subscription,
@@ -159,6 +170,8 @@ impl Workspace {
             choosing_folder: false,
             folder_actions: false,
             leaving: None,
+            groups: Vec::new(),
+            kept: restore::Kept::at_quit(cx),
             _settings: cx.observe_global_in::<SettingsStore>(window, |this, window, cx| {
                 this.background.follow(window, SettingsStore::get(cx));
                 let settings = SettingsStore::get(cx);
@@ -186,6 +199,8 @@ impl Workspace {
         let pane = self.pane(started, program, window, cx);
         let id = pane.id();
         log::info!("app: session {} opens", self.sessions.len() + 1);
+        // A new session joins the shown one's group.
+        let group = self.sessions.get(self.active).and_then(|shown| shown.group);
         self.sessions.push(Session {
             id,
             panes: vec![pane],
@@ -196,6 +211,7 @@ impl Workspace {
             bell: false,
             waiting: false,
             look: None,
+            group,
         });
     }
 
@@ -254,34 +270,6 @@ impl Workspace {
         cx.notify();
     }
 
-    /// Closes session `index`; its program hangs up. The last one closes the window.
-    pub fn close(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
-        if index >= self.sessions.len() {
-            return;
-        }
-        let session = self.sessions.remove(index);
-        log::info!("app: session {} closes", index + 1);
-        // Its textures leave the window's atlas with it.
-        for pane in &session.panes {
-            self.assistant
-                .update(cx, |assistant, cx| assistant.pane_closed(pane.id(), cx));
-            pane.terminal
-                .update(cx, |view, _| view.set_front(false, window));
-        }
-        if self.sessions.is_empty() {
-            log::info!("app: no session left; the window closes");
-            window.remove_window();
-            return;
-        }
-        let shown = index == self.active;
-        self.active = sessions::after_close(self.active, index, self.sessions.len());
-        if shown {
-            self.select(self.active, window, cx);
-        } else {
-            cx.notify();
-        }
-    }
-
     /// What the shown session is called.
     fn title(&self) -> &str {
         self.sessions.get(self.active).map_or(TITLE, Session::named)
@@ -308,6 +296,7 @@ impl Render for Workspace {
         self.background.fit(window);
         let now = Instant::now();
         self.tick(now, cx);
+        self.keep(cx);
         let settings = SettingsStore::get(cx).clone();
         let base = cx.theme().colors.bg;
         let workspace = cx.entity();
@@ -351,13 +340,13 @@ impl Render for Workspace {
             .glass()
             .on_close(move |window, cx| {
                 if !this.update(cx, |this, cx| this.asks(Leave::Window, cx)) {
+                    this.update(cx, |this, cx| this.flush(cx));
                     window.remove_window();
                 }
             });
-        let shown = self
-            .sessions
-            .get(self.active)
-            .map(|session| panes::draw(&session.layout, session, cx));
+        let weak = cx.entity().downgrade();
+        let shown = (self.sessions.get(self.active))
+            .map(|session| panes::draw(&session.layout, session, &weak, window, cx));
         let mut terminal = ShellColumn::new("terminal")
             .title(self.title().to_string())
             .child(
@@ -463,6 +452,9 @@ impl Render for Workspace {
             )
             .on_action(
                 cx.listener(|this, _: &PreviousPane, window, cx| this.step_pane(false, window, cx)),
+            )
+            .on_action(
+                cx.listener(|this, MovePane(toward): &MovePane, _, cx| this.move_pane(*toward, cx)),
             )
             .on_action(cx.listener(|this, _: &LastSession, window, cx| {
                 this.select(this.sessions.len().saturating_sub(1), window, cx)

@@ -5,7 +5,7 @@ use gpui::{Context, EntityId, Window};
 
 use super::Workspace;
 use crate::{
-    sessions::{Program, Session},
+    sessions::{self, Program, Session},
     settings::{self, SettingsStore, StartIn},
     term::{
         Events, Launch, Pty, config,
@@ -23,6 +23,36 @@ impl Workspace {
     /// The session shown, at its place in the sessions' rows.
     pub fn shown(&self) -> usize {
         self.active
+    }
+
+    /// Closes session `index`; its program hangs up. The last one closes the window.
+    pub fn close(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if index >= self.sessions.len() {
+            return;
+        }
+        let session = self.sessions.remove(index);
+        log::info!("app: session {} closes", index + 1);
+        // Its textures leave the window's atlas with it.
+        for pane in &session.panes {
+            self.assistant
+                .update(cx, |assistant, cx| assistant.pane_closed(pane.id(), cx));
+            pane.terminal
+                .update(cx, |view, _| view.set_front(false, window));
+        }
+        if self.sessions.is_empty() {
+            log::info!("app: no session left; the window closes");
+            self.flush(cx);
+            window.remove_window();
+            return;
+        }
+        let shown = index == self.active;
+        self.active = sessions::after_close(self.active, index, self.sessions.len());
+        self.prune_groups(window, cx);
+        if shown {
+            self.select(self.active, window, cx);
+        } else {
+            cx.notify();
+        }
     }
 
     /// A session of the set shell, where Start in says.
@@ -134,7 +164,12 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         self.add(started, Program::default(), window, cx);
-        self.select(self.sessions.len() - 1, window, cx);
+        let id = self.sessions[self.sessions.len() - 1].id;
+        self.arrange();
+        let index = (self.sessions.iter())
+            .position(|session| session.id == id)
+            .expect("the session handed over");
+        self.select(index, window, cx);
     }
 
     /// Starts `program` from `start`, its pty sized as the first layout will fit it.
@@ -170,10 +205,20 @@ impl Workspace {
         let started = self.started(&program, start, cx)?;
         self.add(started, program, window, cx);
         let last = self.sessions.len() - 1;
-        if let Some(at) = at {
+        if let Some(at) = at.map(|at| at.min(last)) {
+            // It joins the group of the row it lands after.
+            let before = at
+                .checked_sub(1)
+                .and_then(|before| self.sessions[before].group);
+            self.sessions[last].group = before;
             self.move_session(last, at);
         }
-        self.select(at.map_or(last, |at| at.min(last)), window, cx);
+        let id = self.sessions[at.map_or(last, |at| at.min(last))].id;
+        self.arrange();
+        let index = (self.sessions.iter())
+            .position(|session| session.id == id)
+            .expect("the session opened");
+        self.select(index, window, cx);
         Ok(())
     }
 }
