@@ -1,6 +1,6 @@
 # ELYTerminal
 
-[![Release](https://img.shields.io/github/v/release/ELY-Open-Source/ELYTerminal?style=flat-square&color=24292f)](https://github.com/ELY-Open-Source/ELYTerminal/releases/latest)
+[![本分支发行版](https://img.shields.io/github/v/release/AnyAnq/ELYTerminal?style=flat-square&color=24292f)](https://github.com/AnyAnq/ELYTerminal/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-3da639?style=flat-square)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.95-dea584?style=flat-square)](https://www.rust-lang.org)
 [![GPUI](https://img.shields.io/badge/GPUI-0.3-5b4cff?style=flat-square)](https://crates.io/crates/gpui-pre)
@@ -13,11 +13,12 @@
 
 ## 安装
 
-[GitHub 上的发行版](https://github.com/ELY-Open-Source/ELYTerminal/releases) 为每个平台提供构建。
+**本分支（Windows x64）：** 前往[本分支的最新发行版](https://github.com/AnyAnq/ELYTerminal/releases/latest)下载安装包或便携版 ZIP。Windows 10 或更高版本可运行 `-windows-x86_64-setup.exe` 安装，或解压 `-windows-x86_64.zip` 后运行 `elyterminal.exe`，并保留同一目录下的其他解压文件。SmartScreen 和 Defender 的区别见 [Windows 安装说明](docs/zh_cn/install.md#windows)。
 
-- macOS 11 或更高，Apple silicon：打开 `ELYTerminal-VERSION.dmg`，把 ELYTerminal 拖进应用程序。应用已用 Developer ID 签名并公证。用 Homebrew：`brew install --cask ely-open-source/tap/elyterminal`。
-- Windows 10 或更高，x86_64，或 ARM64 上的 Windows 11：运行安装包 `ELYTerminal-VERSION-windows-x86_64-setup.exe`（ARM64 用 `-windows-aarch64-setup.exe`），或解压 `ELYTerminal-VERSION-windows-x86_64.zip`（ARM64 用 `-windows-aarch64.zip`），运行 `elyterminal.exe`，zip 里的其他文件留在它旁边。微软的目录收录后也可用 winget：`winget install ELYOpenSource.ELYTerminal`。它未签名；SmartScreen 与 Defender 的区别见 [Windows](docs/zh_cn/install.md#windows)。
-- Linux，x86_64：[软件包](docs/zh_cn/install.md)。
+**上游构建：** Windows ARM64、macOS（Apple 芯片）或 Linux x64 请查看[上游发行版](https://github.com/ELY-Open-Source/ELYTerminal/releases/latest)。以下包管理器命令安装的也是**上游版本**，不是本分支：
+
+- Homebrew（macOS）：`brew install --cask ely-open-source/tap/elyterminal`
+- winget（Windows，若已收录）：`winget install ELYOpenSource.ELYTerminal`
 
 ## 功能
 

@@ -1,6 +1,6 @@
 # ELYTerminal
 
-[![Release](https://img.shields.io/github/v/release/ELY-Open-Source/ELYTerminal?style=flat-square&color=24292f)](https://github.com/ELY-Open-Source/ELYTerminal/releases/latest)
+[![Fork release](https://img.shields.io/github/v/release/AnyAnq/ELYTerminal?style=flat-square&color=24292f)](https://github.com/AnyAnq/ELYTerminal/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-3da639?style=flat-square)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.95-dea584?style=flat-square)](https://www.rust-lang.org)
 [![GPUI](https://img.shields.io/badge/GPUI-0.3-5b4cff?style=flat-square)](https://crates.io/crates/gpui-pre)
@@ -13,11 +13,12 @@ A terminal for macOS, Windows and Linux, in Rust on GPUI and Ely components. Ses
 
 ## Install
 
-A [release on GitHub](https://github.com/ELY-Open-Source/ELYTerminal/releases) carries builds for each platform.
+**This fork (Windows x64):** Download the installer or portable ZIP from the [latest fork release](https://github.com/AnyAnq/ELYTerminal/releases/latest). On Windows 10 or later, run the `-windows-x86_64-setup.exe` installer, or extract the `-windows-x86_64.zip` archive and run `elyterminal.exe` with the other extracted files kept beside it. See the [Windows install notes](docs/en_us/install.md#windows) for SmartScreen and Defender.
 
-- macOS 11 or later, Apple silicon: open `ELYTerminal-VERSION.dmg` and drag ELYTerminal into Applications. The app is signed with Developer ID and notarized. With Homebrew: `brew install --cask ely-open-source/tap/elyterminal`.
-- Windows 10 or later, x86_64, or Windows 11 on ARM64: run the installer, `ELYTerminal-VERSION-windows-x86_64-setup.exe` or `-windows-aarch64-setup.exe`, or unzip `ELYTerminal-VERSION-windows-x86_64.zip`, or `-windows-aarch64.zip`, and run `elyterminal.exe`, the zip's other files kept beside it. With winget, once Microsoft's catalog holds it: `winget install ELYOpenSource.ELYTerminal`. It is unsigned; SmartScreen and Defender are told apart in [Windows](docs/en_us/install.md#windows).
-- Linux, x86_64: [packages](docs/en_us/install.md).
+**Upstream builds:** For Windows ARM64, macOS (Apple silicon), or Linux x64, see the [upstream releases](https://github.com/ELY-Open-Source/ELYTerminal/releases/latest). The following package-manager commands also install the **upstream** version, not this fork:
+
+- Homebrew (macOS): `brew install --cask ely-open-source/tap/elyterminal`
+- winget (Windows, if listed in the catalog): `winget install ELYOpenSource.ELYTerminal`
 
 ## What it does
 
